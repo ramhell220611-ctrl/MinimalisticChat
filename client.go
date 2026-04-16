@@ -1,237 +1,163 @@
-package main // Hello
+package main
 
 import (
-	"bufio" //for writing
-	"crypto/tls"
-	"crypto/x509"
-	"flag"
-	"fmt" //i think you know
-	"log" //logging
-	"math/rand/v2"
-	"net" //cool place for tcp/udp/ip
-	"os"  //os for checks env
-	"strconv"
-	"strings" //convertation into strings
-	"time"    //ping and other things
+	"encoding/json"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 )
 
-const gH = "https://github.com/FlowRamAlltimes/MinimalisticChat/tree/main"
-
-func firstEverBotHere() {
-	fmt.Println("Hello you have used !bot")
-	fmt.Println("!bothelp shows all aviable commands now")
-}
-func dicefunc() {
-	randNum := 0
-	for {
-		randNum = rand.IntN(6) + 1
-		if randNum != 0 {
-			break
-		}
-	}
-	randNumStr := strconv.Itoa(randNum)
-	randNumStrUpd := fmt.Sprintf("Your number is: %v", randNumStr)
-	fmt.Println(randNumStrUpd)
+type UserInterfaceStruct struct {
+	Log     string `json:"login"`
+	Pasw    string `json:"password"`
+	Address string `json:"address"`
+	Port    string `json:"port"`
+	Room    string `json:"room"`
 }
 
-func changeNameWhileOnline(newname string, conn net.Conn) {
-	conn.Write([]byte(".1wannachangen1ck." + newname))
-	fmt.Printf("Changing nick...\n")
-}
-func info() {
-	fmt.Println("v1.7.6")
-	fmt.Println("WELCOME TO MY TCP CHAT")
-	fmt.Println("Creator's GitHub:", gH)
-	fmt.Println("It's wonderful place where you can talk with your friends")
-	fmt.Println("If you are fan of old typed chats, I can show you it")
-	fmt.Println("Send your first message!")
-	fmt.Println("Use /help for list of commands")
-}
-func myIp(conn net.Conn) {
-	fmt.Println("Your IP address is:", conn.RemoteAddr())
-}
-func exitFunc() {
-	fmt.Printf("Closing connection")
-	os.Exit(0)
-}
-func helplist() { // help function its very cool
-	fmt.Println("=============================")
-	fmt.Println("Hello you've used /help")
-	fmt.Println("/health - check server's state")
-	fmt.Println("/list - check all active members")
-	fmt.Println("/help - get help about server")
-	fmt.Println("/quit or /exit - leave chat")
-	fmt.Println("/dice - rand num from 1 to 6")
-	fmt.Println("/change FUTURE_NICKNAME - changes nickname")
-	fmt.Println("/ip - shows your ip(soon it will shows more info, maybe in v.1.8 or later)")
-	fmt.Println("=============================")
-}
-
-func readServerMessages(conn net.Conn) {
-	buf := make([]byte, 256)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.Printf("EOF danger, reconnenct again")
-			return
-		}
-		msg := string(buf[:n])
-		fmt.Printf(">> %s\n", msg)
-	}
-}
-
-func healthCheck(addr, port string) {
-	fullAddress := fmt.Sprintf(addr + ":" + port)
-
-	start := time.Now()
-	_, err := net.DialTimeout("tcp", fullAddress, 1*time.Second)
-	if err != nil {
-		log.Printf("connection error")
-		fmt.Println(err)
-		return
-	}
-	result := time.Since(start).Round(time.Millisecond)
-	fmt.Println("Your ping is:", result)
-	fmt.Println("Server is OK!")
-}
-
-func list(conn net.Conn) {
-	_, err := conn.Write([]byte(".NEEDYOURDATA.")) // .NEEDYOURDATA. is code for getting the info
-	if err != nil {
-		log.Printf("Nothing happened")
-		return
-	}
-	newbuf := make([]byte, 256)
-	n, err := conn.Read(newbuf)
-	if err != nil {
-		log.Printf("Reading error")
-		return
-	}
-	msg := string(newbuf[:n])
-	fmt.Println(msg)
-}
+var (
+	GuiApp UserInterfaceStruct
+	Wg     sync.WaitGroup
+)
 
 func main() {
-	// init flags
-	addr := flag.String("addr", "", "use -addr for connecting")
-	port := flag.String("p", "", "use -p for connecting")
 
-	flag.Parse()
-
-	fullAddress := fmt.Sprintf(*addr + ":" + *port)
-
-	caCert, err := os.ReadFile("ca.crt")
+	err := loader()
 	if err != nil {
-		log.Printf("error while reading cert %v", err)
-		return
+		log.Printf("Error while loading config: %v", err)
 	}
 
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		log.Fatal("We couldnt add crt: file is invalid or isnt PEM")
-	}
+	chatApp := app.New()
 
-	if len(caCert) == 0 {
-		panic("Cert is unaviable or isnt in workdir!")
-	}
-	config := &tls.Config{ // encrypt config
-		RootCAs:            caCertPool,
-		ServerName:         *addr, // dynamic address
-		InsecureSkipVerify: false,
-	}
-	conn, err := tls.Dial("tcp", fullAddress, config)
+	chatWindow := chatApp.NewWindow("Кусок GoВнища")
+	chatWindow.Resize(fyne.NewSize(800, 480))
+
+	// layout group
+
+	entryMessage := widget.NewEntry()
+	entryMessage.PlaceHolder = "type something..."
+
+	applicationHolder := widget.NewMultiLineEntry()
+	applicationHolder.Disable()
+
+	yourRoomName := widget.NewEntry()
+	yourRoomName.Disable()
+
+	yourRoomName.SetText("Room is: " + GuiApp.Room)
+
+	// logic start
+
+	full := fmt.Sprintf("%s:%s", GuiApp.Address, GuiApp.Port)
+	conn, err := net.DialTimeout("tcp", full, 3*time.Second)
 	if err != nil {
-		log.Printf("Connection error, try again later, %s", err)
+		log.Printf("Error while dialing conn, retry: %v", err)
 		return
 	}
 	defer conn.Close()
 
-	fmt.Println("Please enter with nickname:")
-	nickreader := bufio.NewReader(os.Stdin)
-	msg, _ := nickreader.ReadString('\n')
-	msg = strings.TrimSpace(msg)
-	nick := msg
+	Wg.Add(1)
+	go func() {
+		defer Wg.Done()
+		_, err = conn.Write([]byte("/kkk12111dddqqqprstlon " + GuiApp.Log + " " + GuiApp.Room)) // sends package with main data
+	}()
 
-	conn.Write([]byte("NICK:" + msg + "\n"))
+	Wg.Wait() // cuz i can
 
-	go readServerMessages(conn)
+	go func() {
+		for {
+			buffer := make([]byte, 8192)
 
-	for {
-		reader := bufio.NewReader(os.Stdin)
-		text, _ := reader.ReadString('\n')
-		text = strings.TrimSpace(text)
-		if text == "" {
-			break
-		} else if text == "/health" {
-			go healthCheck(*addr, *port)
-			continue
-		} else if text == "/list" {
-			go func() {
-				list(conn)
-			}()
-			continue
-		} else if text == "/help" {
-			go func() {
-				helplist()
-			}()
-			continue
-		} else if text == "/quit" || text == "/exit" {
-			go func() {
-				exitFunc()
-			}()
-			continue
-		} else if text == "/ip" {
-			go func() {
-				myIp(conn)
-			}()
-			continue
-		} else if text == "/info" {
-			go func() {
-				info()
-			}()
-			continue
-		} else if strings.HasPrefix(text, "/change") {
-			go func() {
-				newNickNameForChat := strings.SplitN(text, " ", 2)
-				if len(newNickNameForChat) < 2 {
-					log.Printf("Use /change normally")
-				}
-				changeNameWhileOnline(newNickNameForChat[1], conn)
-			}()
-			continue
-		} else if text == "/dice" {
-			go dicefunc()
-		} else if strings.HasPrefix(text, "/msg") {
-			_, err := conn.Write([]byte(text))
+			n, err := conn.Read(buffer)
 			if err != nil {
-				log.Printf("Error while sending private msg!")
-				continue
+				log.Printf("%v", err)
+				return
 			}
-			continue
-		} else if text == "!bot" {
-			go firstEverBotHere()
-			continue
-		} else if text == "/whoami" {
-			fmt.Println("You are:", nick)
-			continue
-		} else if text == "!botrand" {
-			fmt.Printf("You are in game-mode")
-			randNum := rand.IntN(100) + 1
-			guess := 0
-			for {
-				fmt.Scan(&guess)
-				if guess == randNum {
-					break
+
+			appendMessage := string(buffer[:n]) + "\n"
+
+			if strings.HasPrefix(appendMessage, "///") {
+				roomName := strings.SplitN(appendMessage, " ", 2)
+				yourRoomName.SetText(roomName[1])
+				GuiApp.Room = roomName[1]
+
+				err := updateRoomTitleJsn()
+				if err != nil {
+					log.Printf("Error while updating room title: %v", err)
 				}
-				fmt.Println("Nah, its wrong num!")
+
+				continue // skips appending
 			}
-			fmt.Println("Yeah, you have won!")
-			continue
+
+			applicationHolder.Append(appendMessage)
 		}
-		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
-		if err != nil {
-			log.Printf("Sending error %s", err)
+	}()
+
+	entryMessage.OnSubmitted = func(content string) {
+		if content == "" {
+			return
 		}
+		appMsg := time.Now().Format("15:04:05 02.01.2006") + " You" + ": " + content + "\n"
+
+		applicationHolder.Append(appMsg)
+
+		if strings.HasPrefix(content, "/") {
+			_, err = conn.Write([]byte(content + "\n"))
+		} else {
+			_, err = conn.Write([]byte(time.Now().Format("15:04:05 02.01.2006") + GuiApp.Log + ": " + content + "\n"))
+
+			if err != nil {
+				log.Printf("%v", err)
+			}
+
+		}
+		entryMessage.SetText("")
 	}
+
+	// logic ends here (i mean connection, logic and etc.)
+	winLayout := container.NewBorder(yourRoomName, entryMessage, nil, nil, applicationHolder)
+
+	chatWindow.SetContent(winLayout)
+	chatWindow.ShowAndRun()
 }
 
+func loader() error {
+	bytes, err := os.ReadFile("login.json")
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(bytes, &GuiApp)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func updateRoomTitleJsn() error {
+	data, err := json.MarshalIndent(GuiApp, "", " ")
+	if err != nil {
+		log.Printf("Marshaling error idk!")
+		return err
+	}
+
+	timeFile := "login.json.tmp"
+	err = os.WriteFile(timeFile, data, 0644)
+	if err != nil {
+		log.Printf("Writing error")
+		return err
+	}
+
+	loader() // calls loader
+
+	return os.Rename("login.json.tmp", "login.json")
+}
