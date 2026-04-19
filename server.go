@@ -55,7 +55,7 @@ type GenerationConfig struct {
 	MaxOutputTokens int     `json:"maxOutputTokens"`
 }
 
-// Структуры для ответа (Google Native)
+// resp structure (Google Native)
 type GoogleResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -254,10 +254,9 @@ func (s *server) broadcast(conn net.Conn, entryMessage string) {
 
 	for clientConn := range s.activeConnections {
 		if clientConn == conn {
-			continue // Самим себе не шлем
+			continue 
 		}
 
-		// Берем ник этого клиента, чтобы узнать его комнату
 		clientNick := s.users[clientConn]
 		clientRoom := s.roomsLmao[clientNick]
 
