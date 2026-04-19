@@ -1,16 +1,15 @@
-FROM alpine:3.20.3
-# do not use with tag latest
-RUN apk --no-cache add ca-certificates tzdata && \
-    cp /usr/share/zoneinfo/Europe/Moscow /etc/localtime
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /chat-server ./server.go
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
 WORKDIR /root/
-COPY chat .
-COPY server.crt .
-COPY server.key .
-#copies cert files
-RUN touch banlist.txt mutelist.txt server.log
-# touches files
-EXPOSE 1358 1359
-# random ports
-RUN chmod +x chat
-CMD ["./chat", "-addr=0.0.0.0", "-p=1358", "-pRst=1359"]
-# I have already checked, Dockerfile works fine
+COPY --from=builder /chat-server .
+COPY config.json .
+COPY aiConf.json .
+EXPOSE 59999
+CMD ["./chat-server"]
