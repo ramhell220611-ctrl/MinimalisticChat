@@ -3,7 +3,7 @@
 GUI chat based on golang and made for linux kernel x86/64🖥️
 
 ## Architecture
-<img width="1003" height="600" alt="изображение" src="https://github.com/user-attachments/assets/facfd520-a982-484e-913f-b6bde7ccb292" />
+<img width="1008" height="607" alt="image" src="https://github.com/user-attachments/assets/dfe3c879-b23b-485e-82b0-ee510a35840c" />
 
 
 ## Requirements
