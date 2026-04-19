@@ -87,7 +87,7 @@ func main() {
 			if strings.HasPrefix(appendMessage, "///") {
 				roomName := strings.SplitN(appendMessage, " ", 2)
 				yourRoomName.SetText(roomName[1])
-				GuiApp.Room = roomName[1]
+				GuiApp.Room = strings.TrimSpace(roomName[1])
 
 				err := updateRoomTitleJsn()
 				if err != nil {
@@ -110,6 +110,8 @@ func main() {
 		applicationHolder.Append(appMsg)
 
 		if strings.HasPrefix(content, "/") {
+			_, err = conn.Write([]byte(content + "\n"))
+		} else if strings.HasPrefix(content, "@bot") {
 			_, err = conn.Write([]byte(content + "\n"))
 		} else {
 			_, err = conn.Write([]byte(time.Now().Format("15:04:05 02.01.2006") + GuiApp.Log + ": " + content + "\n"))
