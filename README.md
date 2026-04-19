@@ -1,45 +1,35 @@
- # 📞Minimalistic Chat v1.7.7-release
+ # ⚡️ GOLANG CHAT CORE: The Gemini Awakening ⚡️
 
-GUI chat based on golang and made for linux kernel x86/64🖥️
+This isn't just another chat app. It's a high-performance neural hub for your terminal.
 
-## Architecture
-<img width="1008" height="607" alt="image" src="https://github.com/user-attachments/assets/dfe3c879-b23b-485e-82b0-ee510a35840c" />
+While others drown in bloated frameworks and sluggish JS wrappers, we return to the metal. Built with pure Go, powered by low-latency sockets, and directly wired into the most advanced AI on the planet — Google Gemini 1.5 Flash.
+🛠 The Tech Stack of Gods:
 
+* Engine: Pure Golang — speed that outruns your thoughts.
 
-## Requirements
+* Heart: Google Gemini Native API — no middlemen, no OpenAI overhead, just raw logic.
 
-1. (If you wanna take my code) - Go 1.22 at least
+* Architecture: Concurrent TCP/IP Server — handles thousands of connections without breaking a sweat or leaking a byte.
 
-2. Friend or somebody else and a bit of time
+* Interface: Your favorite terminal. No buttons. No fluff. Just raw power.
 
-3. The desire to spend time here
+# 🌑 Why This Repo?
 
-## Description
+    "In a world where UI replaces the mind, we choose the Code"
 
-The minimum-interface tcp chat. Just pet-project, nothing more.
-I used RWMutex and gorutines. I hope without race conditions
+This project is for those who understand the difference between a "simple bot" and a high-performance network service. We've squeezed every drop of performance out of the native Google API, packed it into efficient data structures, and made it work for you in real-time.
+# 🚀 Key Features:
 
-## Useful commands
+* Native Google Protocol: No OpenAI emulation. Direct JSON exchange with generationConfig for surgical precision in AI behavior.
 
-Client
+* Zero-Footprint: Minimalistic resource consumption. Run it on a toaster, a vintage Celeron, or a cloud cluster.
 
-```bash
-/cr room_name # create room
+* Dead-Simple Config: Configure everything via .json — plug in your API key and dominate.
 
-/join room_name # join room
+# Quick Start
 
-/msg target_nick message_text # sends private message
 ```
-
-Server part 
-
-```bash
-
-# Perhaps, I'll add something like list or /ban idk
+git clone https://github.com/FlowRamAlltimes/MinimalisticChat
+Configure config.json & aiConf.json
+go build -o chat-core server.go
 ```
-
-
-## How to use
-
-Firstly you need to download files (host and client parts from releases) and after you need to make file work with:
-Then you have to create or copy login.json file into your filepath with the gui client, soon i'll try to make settings in the UI
