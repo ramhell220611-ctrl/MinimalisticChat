@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -12,6 +16,16 @@ import (
 	"time"
 )
 
+const (
+	conf     = "config.json"
+	keyStart = "Bearer "
+)
+
+type Config struct {
+	ApiKey string `json:"apikey"`
+	Url    string `json:"url"`
+}
+
 type server struct {
 	mu                sync.RWMutex
 	activeConnections map[net.Conn]bool
@@ -19,6 +33,37 @@ type server struct {
 	usersIP           map[string]net.Conn
 	//
 	roomsLmao map[string]string // like map name (#global) & value (slice of users)
+}
+
+type GoogleRequest struct {
+	Contents         []Content        `json:"contents"`
+	GenerationConfig GenerationConfig `json:"generationConfig"`
+}
+
+type Content struct {
+	Role  string `json:"role,omitempty"`
+	Parts []Part `json:"parts"`
+}
+
+type Part struct {
+	Text string `json:"text"`
+}
+
+type GenerationConfig struct {
+	Temperature     float64 `json:"temperature"`
+	TopP            float64 `json:"topP"`
+	MaxOutputTokens int     `json:"maxOutputTokens"`
+}
+
+// Структуры для ответа (Google Native)
+type GoogleResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
 }
 
 func main() {
@@ -145,6 +190,54 @@ func (s *server) newConn(conn net.Conn) {
 			targetConn := s.usersIP[nick]
 			_, err = targetConn.Write([]byte("*IN PRIVATE* by " + senderNick + ": " + msg))
 			s.mu.Unlock()
+		case strings.HasPrefix(message, "@bot"):
+			data := strings.SplitN(message, " ", 2)
+			if len(data) < 2 {
+				conn.Write([]byte("AI: type your question after @bot\n"))
+			}
+			requestText := data[1]
+
+			templateBytes, _ := os.ReadFile("aiConf.json")
+			byteInf, _ := os.ReadFile("config.json")
+
+			var payload GoogleRequest
+			var Conf Config
+			json.Unmarshal(templateBytes, &payload)
+			json.Unmarshal(byteInf, &Conf)
+
+			payload.Contents = []Content{
+				{
+					Parts: []Part{{Text: requestText}},
+				},
+			}
+
+			jsonData, _ := json.Marshal(payload)
+
+			fullURL := Conf.Url + "?key=" + Conf.ApiKey
+
+			req, _ := http.NewRequest("POST", fullURL, bytes.NewBuffer(jsonData))
+			req.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{Timeout: 30 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("AI error: %v", err)
+			}
+			defer resp.Body.Close()
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			log.Printf("RAW RESPONSE: %s", string(bodyBytes))
+
+			var googleResp GoogleResponse
+			err = json.Unmarshal(bodyBytes, &googleResp)
+			if err != nil {
+				log.Printf("Unmarshal error: %v", err)
+			}
+
+			if len(googleResp.Candidates) > 0 && len(googleResp.Candidates[0].Content.Parts) > 0 {
+				answer := googleResp.Candidates[0].Content.Parts[0].Text
+				conn.Write([]byte("AI: " + answer + "\n"))
+			}
 		default:
 			log.Printf("New message: %s", message)
 			s.broadcast(conn, message)
@@ -161,9 +254,10 @@ func (s *server) broadcast(conn net.Conn, entryMessage string) {
 
 	for clientConn := range s.activeConnections {
 		if clientConn == conn {
-			continue 
+			continue // Самим себе не шлем
 		}
-		
+
+		// Берем ник этого клиента, чтобы узнать его комнату
 		clientNick := s.users[clientConn]
 		clientRoom := s.roomsLmao[clientNick]
 
