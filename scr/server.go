@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"log"
@@ -19,6 +20,11 @@ import (
 const (
 	conf     = "config.json"
 	keyStart = "Bearer "
+)
+
+var (
+	caCert  string = "server.crt"
+	keyCert string = "server.key"
 )
 
 type Config struct {
@@ -55,7 +61,6 @@ type GenerationConfig struct {
 	MaxOutputTokens int     `json:"maxOutputTokens"`
 }
 
-// resp structure (Google Native)
 type GoogleResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -67,10 +72,21 @@ type GoogleResponse struct {
 }
 
 func main() {
-
 	// context init
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// end
+	// starts work with certs
+
+	cert, err := tls.LoadX509KeyPair(caCert, keyCert)
+	if err != nil {
+		log.Printf("Certificate error lmao: %v\n", err)
+		return
+	}
+
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 
 	s := &server{
 		activeConnections: make(map[net.Conn]bool),
@@ -79,7 +95,7 @@ func main() {
 		roomsLmao:         make(map[string]string), // k = nickname, v = room name
 	}
 
-	listener, err := net.Listen("tcp", ":59999")
+	listener, err := tls.Listen("tcp", "0.0.0.0:59999", tlsConf)
 	if err != nil {
 		log.Fatalln("!ERROR!ERROR!ERROR!", err, time.Now().Format("15:04:05 02.01.2006"))
 	}
@@ -91,7 +107,7 @@ func main() {
 		listener.Close()
 	}()
 
-	log.Printf("Chat runs without any troubles")
+	log.Printf("Running was done successfully\n")
 
 	for {
 		c, err := listener.Accept()
@@ -142,7 +158,7 @@ func (s *server) newConn(conn net.Conn) {
 		case strings.HasPrefix(message, "/who"):
 			s.mu.RLock()
 			for _, v := range s.users {
-				_, err := conn.Write([]byte(v))
+				_, err := conn.Write([]byte(v + "\n"))
 				if err != nil {
 					log.Println(err)
 				}
@@ -254,9 +270,10 @@ func (s *server) broadcast(conn net.Conn, entryMessage string) {
 
 	for clientConn := range s.activeConnections {
 		if clientConn == conn {
-			continue 
+			continue // Самим себе не шлем
 		}
 
+		// Берем ник этого клиента, чтобы узнать его комнату
 		clientNick := s.users[clientConn]
 		clientRoom := s.roomsLmao[clientNick]
 
