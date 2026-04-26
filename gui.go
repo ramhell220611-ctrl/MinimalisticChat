@@ -1,10 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"strings"
 	"sync"
@@ -30,8 +31,26 @@ var (
 )
 
 func main() {
+	// cert configurating
+	pemBytes, err := os.ReadFile("ca.crt")
+	if err != nil {
+		log.Printf("Cert file reading error, DO NOT REMOVE FILE FROM DIR\n")
+		return
+	}
 
-	err := loader()
+	pool := x509.NewCertPool()
+
+	if !pool.AppendCertsFromPEM(pemBytes) {
+		log.Fatalf("We couldnt add PEM cert in the pool cuz it isnt PEM or doesnt exist\n")
+	}
+
+	conf := &tls.Config{
+		RootCAs:            pool,
+		InsecureSkipVerify: false,
+		ServerName:         GuiApp.Address,
+	}
+	// ends.
+	err = loader()
 	if err != nil {
 		log.Printf("Error while loading config: %v", err)
 	}
@@ -57,7 +76,7 @@ func main() {
 	// logic start
 
 	full := fmt.Sprintf("%s:%s", GuiApp.Address, GuiApp.Port)
-	conn, err := net.DialTimeout("tcp", full, 3*time.Second)
+	conn, err := tls.Dial("tcp", full, conf)
 	if err != nil {
 		log.Printf("Error while dialing conn, retry: %v", err)
 		return

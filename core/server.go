@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log"
@@ -14,11 +16,26 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	// sql
+	_ "modernc.org/sqlite"
 )
 
 const (
 	conf     = "config.json"
 	keyStart = "Bearer "
+)
+
+var (
+	Database *sql.DB
+	caCert   string = "server.crt"
+	keyCert  string = "server.key"
+	query    string = `CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender TEXT,
+    content TEXT,
+    time DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
 )
 
 type Config struct {
@@ -55,7 +72,6 @@ type GenerationConfig struct {
 	MaxOutputTokens int     `json:"maxOutputTokens"`
 }
 
-// resp structure (Google Native)
 type GoogleResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -67,10 +83,21 @@ type GoogleResponse struct {
 }
 
 func main() {
-
 	// context init
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// end
+	// starts work with certs
+
+	cert, err := tls.LoadX509KeyPair(caCert, keyCert)
+	if err != nil {
+		log.Printf("Certificate error lmao: %v\n", err)
+		return
+	}
+
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
 
 	s := &server{
 		activeConnections: make(map[net.Conn]bool),
@@ -79,7 +106,19 @@ func main() {
 		roomsLmao:         make(map[string]string), // k = nickname, v = room name
 	}
 
-	listener, err := net.Listen("tcp", ":59999")
+	Database, err = sql.Open("sqlite", "crystal.db")
+	if err != nil {
+		log.Printf("Database opening error: %v\n", err)
+		return
+	}
+	defer Database.Close()
+
+	_, err = Database.Exec(query)
+	if err != nil {
+		log.Fatalf("DB Exec Error: %v", err)
+	}
+
+	listener, err := tls.Listen("tcp", "0.0.0.0:59999", tlsConf)
 	if err != nil {
 		log.Fatalln("!ERROR!ERROR!ERROR!", err, time.Now().Format("15:04:05 02.01.2006"))
 	}
@@ -91,7 +130,7 @@ func main() {
 		listener.Close()
 	}()
 
-	log.Printf("Chat runs without any troubles")
+	log.Printf("Running was done successfully\n")
 
 	for {
 		c, err := listener.Accept()
@@ -127,6 +166,33 @@ func (s *server) newConn(conn net.Conn) {
 		conn.Close()
 	}()
 
+	rows, err := Database.Query("SELECT id, sender, content FROM messages ORDER BY id DESC LIMIT 500")
+	if err != nil {
+		log.Printf("Error of getting info: %v\n", err)
+		_, err = conn.Write([]byte("Out of messages due to unexpected error. (c) Microslop"))
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			id      int
+			user    string
+			content string
+		)
+		err := rows.Scan(&id, &user, &content)
+		if err != nil {
+			log.Printf("Error while scanning info\n")
+			return
+		}
+		// sends
+		_, err = conn.Write([]byte(user + ": " + content))
+
+		if err = rows.Err(); err != nil {
+			log.Fatalln(err)
+		}
+	}
+
 	for {
 		buffer := make([]byte, 8192) // 8kb buf idk
 
@@ -142,7 +208,7 @@ func (s *server) newConn(conn net.Conn) {
 		case strings.HasPrefix(message, "/who"):
 			s.mu.RLock()
 			for _, v := range s.users {
-				_, err := conn.Write([]byte(v))
+				_, err := conn.Write([]byte(v + "\n"))
 				if err != nil {
 					log.Println(err)
 				}
@@ -246,6 +312,12 @@ func (s *server) newConn(conn net.Conn) {
 }
 
 func (s *server) broadcast(conn net.Conn, entryMessage string) {
+	preparedQuery := "INSERT INTO messages(sender, content) VALUES(?, ?)"
+	doPrepare, err := Database.Prepare(preparedQuery)
+	if err != nil {
+		log.Printf("Error while prepareing db")
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -254,7 +326,7 @@ func (s *server) broadcast(conn net.Conn, entryMessage string) {
 
 	for clientConn := range s.activeConnections {
 		if clientConn == conn {
-			continue 
+			continue
 		}
 
 		clientNick := s.users[clientConn]
@@ -262,9 +334,12 @@ func (s *server) broadcast(conn net.Conn, entryMessage string) {
 
 		if clientRoom == myRoom {
 			_, err := clientConn.Write([]byte(entryMessage))
+			doPrepare.Exec(myNick, entryMessage)
 			if err != nil {
 				log.Printf("Write error: %v", err)
+				return
 			}
 		}
 	}
 }
+
