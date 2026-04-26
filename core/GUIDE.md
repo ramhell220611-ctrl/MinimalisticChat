@@ -19,7 +19,7 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out s
 ```
 
 ## Second way
-# Go to releases by this [link](https://github.com/FlowRamAlltimes/MinimalisticChat/Releases)
+# Go to releases by this [link](https://github.com/FlowRamAlltimes/MinimalisticChat/releases)
 ```bash
 # Download last version & run it
 ./CrystalCoreTlsEncrypted-v1.8
