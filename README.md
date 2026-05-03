@@ -21,12 +21,6 @@ While others drown in bloated frameworks and sluggish JS wrappers, we return to 
 
 <img width="773" height="483" alt="image" src="https://github.com/user-attachments/assets/d9211b91-f55f-4f66-af58-76f158f4dfa3" />
 
-
-# 🏁 Architecture 🏁
-
-<img width="773" height="483" alt="image" src="https://github.com/user-attachments/assets/d9211b91-f55f-4f66-af58-76f158f4dfa3" />
-
-
 # 🌑 Why This Repo?
 
     "In a world where UI replaces the mind, we choose the Code"
